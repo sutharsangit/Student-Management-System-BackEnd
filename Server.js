@@ -1,161 +1,104 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const cors = require('cors');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-let books = [
-  { id: 1, bookName: "JavaScript", quantity: 10 },
-  { id: 2, bookName: "React", quantity: 15 },
-  { id: 3, bookName: "NodeJS", quantity: 20 }
-];
+// MongoDB connection
+const connectDB = async () => {
+  try {
+    const conn = await mongoose.connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    console.log("MongoDB connected: " + conn.connection.name);
+  } catch (err) {
+    console.error("MongoDB connection error: " + err.message);
+  }
+};
 
-// Welcome route
-app.get('/', (req, res) => {
-  res.send("Book Management System");
+connectDB();
+
+// Book Schema & Model
+const bookSchema = new mongoose.Schema({
+  id: { type: Number, required: true, unique: true },
+  bookname: { type: String, required: true },
+  quantity: { type: Number, required: true }
 });
 
-// Get all books
-app.get('/books', (req, res) => {
-  res.json(books);
-});
+const Book = mongoose.model("Books", bookSchema);
 
-// Add new book
-app.post('/books', (req, res) => {
-  const newBook = req.body;
-  books.push(newBook);
-  res.json({ message: "Book added successfully", books });
-});
+// Test route
+app.get("/", (req, res) => res.send("Book API running"));
 
-// Update book details
-app.put('/books/:id', (req, res) => {
-  const bookId = parseInt(req.params.id);
-  const book = books.find(b => b.id === bookId);
-  if (book) {
-    book.quantity = req.body.quantity;
-    res.json({ message: "Book updated successfully", books });
-  } else {
-    res.status(404).json({ message: "Book not found" });
+// GET all books
+app.get("/books", async (req, res) => {
+  try {
+    const books = await Book.find({}, { _id: 0, __v: 0 });
+    res.json(books);
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
   }
 });
 
-// Delete a book
-app.delete('/books/:id', (req, res) => {
-  const bookId = parseInt(req.params.id);
-  const found = books.find(b => b.id === bookId);
-
-  if (found) {
-    books = books.filter(b => b.id !== bookId);
-    res.json({ message: "Book deleted successfully", books });
-  } else {
-    res.status(404).json({ message: "Book not found" });
+// GET single book by ID
+app.get("/books/:bid", async (req, res) => {
+  const id = parseInt(req.params.bid);
+  try {
+    const book = await Book.findOne({ id }, { _id: 0, __v: 0 });
+    if (!book) return res.status(404).json({ msg: "Book not found" });
+    res.json(book);
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
   }
 });
 
-app.listen(3748, () =>
-  console.log("✅ Backend running on http://localhost:3748")
-);
+// POST create new book
+app.post("/books", async (req, res) => {
+  try {
+    const { id, bookname, quantity } = req.body;
 
+    if (id == null || !bookname || quantity == null) {
+      return res.status(400).json({ msg: "All fields required" });
+    }
 
-// const express = require('express');
-// const cors = require('cors');
-// const mongoose = require('mongoose');
+    const exists = await Book.findOne({ id });
+    if (exists) return res.status(400).json({ msg: "Book ID already exists" });
 
-// const app = express();
-// const PORT = 8000;
+    const newBook = new Book({ id, bookname, quantity });
+    await newBook.save();
+    res.json({ book: newBook, msg: "Book added successfully" });
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
 
-// // Middleware
-// app.use(cors());
-// app.use(express.json());
+// PUT update book
+app.put("/books/:bid", async (req, res) => {
+  const id = parseInt(req.params.bid);
+  try {
+    const result = await Book.updateOne({ id }, { $set: req.body });
+    if (result.matchedCount === 0) return res.status(404).json({ msg: "Book not found" });
+    res.json({ msg: "Book updated successfully" });
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
 
-// // Connect to MongoDB
-// mongoose.connect('mongodb://localhost:27017/studentsDB', )
-// .then(() => console.log('MongoDB connected'))
-// .catch(err => console.error('MongoDB connection error:', err));
+// DELETE book
+app.delete("/books/:bid", async (req, res) => {
+  const id = parseInt(req.params.bid);
+  try {
+    const result = await Book.deleteOne({ id });
+    if (result.deletedCount === 0) return res.status(404).json({ msg: "Book not found" });
+    res.json({ msg: "Book deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
 
-// // Define Student schema and model
-// const studentSchema = new mongoose.Schema({
-//     id: Number,
-//     name: String,
-//     email: String,
-//     age: Number,
-//     gender: String,
-//     course: String,
-//     year: Number,
-//     GPA: Number,
-// });
-
-// const Student = mongoose.model('Student', studentSchema);
-
-// // Get all students
-// app.get('/students', async (req, res) => {
-//     try {
-//         const students = await Student.find();
-//         res.json(students);
-//     } catch (err) {
-//         res.status(500).json({ message: 'Error fetching students' });
-//     }
-// });
-
-// // Get student by ID
-// app.get('/students/:id', async (req, res) => {
-//     try {
-//         const student = await Student.findOne({ id: parseInt(req.params.id) });
-//         if (student) {
-//             res.json(student);
-//         } else {
-//             res.status(404).json({ message: 'Student Not Found' });
-//         }
-//     } catch (err) {
-//         res.status(500).json({ message: 'Error fetching student' });
-//     }
-// });
-
-// // Add new student
-// app.post('/students', async (req, res) => {
-//     try {
-//         const newStudent = new Student(req.body);
-//         await newStudent.save();
-//         res.status(201).json({ message: 'Student Added Successfully', student: newStudent });
-//     } catch (err) {
-//         res.status(500).json({ message: 'Error adding student' });
-//     }
-// });
-
-// // Update student by ID
-// app.put('/students/:id', async (req, res) => {
-//     try {
-//         const updatedStudent = await Student.findOneAndUpdate(
-//             { id: parseInt(req.params.id) },
-//             req.body,
-//             { new: true }
-//         );
-//         if (updatedStudent) {
-//             res.json({ message: 'Student Updated Successfully', student: updatedStudent });
-//         } else {
-//             res.status(404).json({ message: 'Student not Found' });
-//         }
-//     } catch (err) {
-//         res.status(500).json({ message: 'Error updating student' });
-//     }
-// });
-
-// // Delete student by ID
-// app.delete('/students/:id', async (req, res) => {
-//     try {
-//         const result = await Student.deleteOne({ id: parseInt(req.params.id) });
-//         if (result.deletedCount > 0) {
-//             res.json({ message: 'Student deleted successfully' });
-//         } else {
-//             res.status(404).json({ message: 'Student not Found' });
-//         }
-//     } catch (err) {
-//         res.status(500).json({ message: 'Error deleting student' });
-//     }
-// });
-
-// // Start server
-// app.listen(PORT, () => {
-//     console.log('Running at http://localhost:${',PORT,'}');
-// });
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
